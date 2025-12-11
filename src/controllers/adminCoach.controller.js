@@ -1,6 +1,7 @@
 // src/controllers/adminCoach.controller.js
 import bcrypt from "bcryptjs";
 import { pool } from "../../config/db.js";
+import { mailer } from "../../utils/mailer.js";
 
 // GET /api/admin/coaches  (list all coaches)
 // GET /api/admin/coaches
@@ -29,6 +30,54 @@ export const listCoaches = async (req, res) => {
 
 
 // POST /api/admin/coaches
+// export const createCoach = async (req, res) => {
+//   try {
+//     const { name, username, email, password, status, region } = req.body;
+
+//     if (!name || !username || !email || !password || !region) {
+//       return res
+//         .status(400)
+//         .json({ message: "Name, username, email, password & region are required" });
+//     }
+
+//     // Check duplicate
+//     const [existing] = await pool.query(
+//       "SELECT u_id FROM users WHERE u_username = ? OR u_email = ? LIMIT 1",
+//       [username, email]
+//     );
+//     if (existing.length > 0) {
+//       return res
+//         .status(409)
+//         .json({ message: "Username or email already exists" });
+//     }
+
+//     const hash = await bcrypt.hash(password, 10);
+//     const u_status = status === 0 || status === "0" ? 0 : 1;
+
+//     const [result] = await pool.query(
+//       `INSERT INTO users 
+//        (u_name, u_username, u_email, u_password, u_role, u_status, u_region)
+//        VALUES (?, ?, ?, ?, 'COACH', ?, ?)`,
+//       [name, username, email, hash, u_status, region]
+//     );
+
+//     return res.status(201).json({
+//       message: "Coach created",
+//       coach: {
+//         u_id: result.insertId,
+//         u_name: name,
+//         u_username: username,
+//         u_email: email,
+//         u_status,
+//         u_region: region,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("Error creating coach:", err);
+//     return res.status(500).json({ message: "Failed to create coach" });
+//   }
+// };
+
 export const createCoach = async (req, res) => {
   try {
     const { name, username, email, password, status, region } = req.body;
@@ -60,8 +109,40 @@ export const createCoach = async (req, res) => {
       [name, username, email, hash, u_status, region]
     );
 
+    /* ================================
+          📩 SEND EMAIL TO COACH
+    ================================= */
+    try {
+      await mailer.sendMail({
+        from: `"Football System" <${process.env.SMTP_USER}>`,
+        to: email,
+        subject: "Your Coach Account Credentials",
+        html: `
+          <h3>Welcome Coach ${name},</h3>
+          <p>Your account has been created successfully.</p>
+
+          <p><b>Login Details:</b></p>
+          <p>Username: <b>${username}</b></p>
+          <p>Email: <b>${email}</b></p>
+          <p>Password: <b>${password}</b></p>
+
+          <br />
+          <p>You can login using the link below:</p>
+          <a href="${process.env.BASE_FRONTEND_URL}/login" target="_blank">
+            Login to Dashboard
+          </a>
+
+          <br/><br/>
+          <p>Best regards,<br/>Football Management System</p>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("Email sending failed:", mailErr);
+      // Do NOT return error here — creation already successful
+    }
+
     return res.status(201).json({
-      message: "Coach created",
+      message: "Coach created & login details emailed",
       coach: {
         u_id: result.insertId,
         u_name: name,
@@ -76,6 +157,7 @@ export const createCoach = async (req, res) => {
     return res.status(500).json({ message: "Failed to create coach" });
   }
 };
+
 
 // PUT /api/admin/coaches/:id  (update coach: name, username, email, status, optional new password)
 
