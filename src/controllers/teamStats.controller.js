@@ -108,20 +108,82 @@ export const getSingleTeamStats = async (req, res) => {
 
 
 
+// export const getTeamStatsAverage = async (req, res) => {
+//   try {
+//     const teamId = req.params.teamId;
+
+//     // 1) Get latest team stat (same as player logic)
+//     const [rows] = await pool.query(
+//       `
+//       SELECT *
+//       FROM team_stats
+//       WHERE team_id = ?
+//       ORDER BY created_at DESC
+//       LIMIT 1
+//       `,
+//       [teamId]
+//     );
+
+//     if (rows.length === 0) {
+//       return res.json({
+//         success: true,
+//         team: null,
+//         rawTeam: null
+//       });
+//     }
+
+//     const t = rows[0];
+//     const tm = t.matches || 0;
+
+//     // ⭐ TEAM PER-MATCH AVERAGES (same formula as player API)
+//     const teamStats = {
+//       matches: tm,
+//       goals: tm ? t.goals / tm : 0,
+//       assists: tm ? t.assists / tm : 0,
+//       shots: tm ? t.shots / tm : 0,
+//       shots_on_goal: tm ? t.shots_on_goal / tm : 0,
+//       big_chances: tm ? t.big_chances / tm : 0,
+//       key_passes: tm ? t.key_passes / tm : 0,
+//       tackles: tm ? t.tackles / tm : 0,
+//       pass_completion_pct: tm ? t.pass_completion_pct / tm : 0,
+//       minutes: tm ? t.minutes / tm : 0,
+//       cautions: tm ? t.cautions / tm : 0,
+//       ejections: tm ? t.ejections / tm : 0,
+//       progressive_carries: tm ? t.progressive_carries / tm : 0,
+//       defensive_actions: tm ? t.defensive_actions / tm : 0
+//     };
+
+//     // ⭐ RAW TEAM VALUES
+//     const rawTeam = { ...t };
+
+//     return res.json({
+//       success: true,
+//       team: teamStats,
+//       rawTeam
+//     });
+
+//   } catch (err) {
+//     console.error("getTeamStatsAverage error:", err);
+//     return res.status(500).json({ message: "Failed to load team averages" });
+//   }
+// };
+
+
 export const getTeamStatsAverage = async (req, res) => {
   try {
     const teamId = req.params.teamId;
 
-    // 1) Get latest team stat (same as player logic)
+    // 1) Get the latest team stats but also ensure we get the MAX matches count
+    // Hum query mein MAX(matches) as max_matches select kar rahay hain
     const [rows] = await pool.query(
       `
-      SELECT *
+      SELECT *, (SELECT MAX(matches) FROM team_stats WHERE team_id = ?) as max_matches
       FROM team_stats
       WHERE team_id = ?
       ORDER BY created_at DESC
       LIMIT 1
       `,
-      [teamId]
+      [teamId, teamId]
     );
 
     if (rows.length === 0) {
@@ -133,9 +195,10 @@ export const getTeamStatsAverage = async (req, res) => {
     }
 
     const t = rows[0];
-    const tm = t.matches || 0;
+    // Yahan hum max_matches use kar rahay hain jo query se calculate ho kar aya hai
+    const tm = t.max_matches || 0; 
 
-    // ⭐ TEAM PER-MATCH AVERAGES (same formula as player API)
+    // ⭐ TEAM PER-MATCH AVERAGES
     const teamStats = {
       matches: tm,
       goals: tm ? t.goals / tm : 0,
@@ -145,7 +208,7 @@ export const getTeamStatsAverage = async (req, res) => {
       big_chances: tm ? t.big_chances / tm : 0,
       key_passes: tm ? t.key_passes / tm : 0,
       tackles: tm ? t.tackles / tm : 0,
-      pass_completion_pct: tm ? t.pass_completion_pct / tm : 0,
+      pass_completion_pct: tm ? t.pass_completion_pct / tm : 0, // Note: Aggregated avg may need different math if this is already a %
       minutes: tm ? t.minutes / tm : 0,
       cautions: tm ? t.cautions / tm : 0,
       ejections: tm ? t.ejections / tm : 0,
@@ -154,7 +217,7 @@ export const getTeamStatsAverage = async (req, res) => {
     };
 
     // ⭐ RAW TEAM VALUES
-    const rawTeam = { ...t };
+    const rawTeam = { ...t, matches: tm };
 
     return res.json({
       success: true,
@@ -167,5 +230,4 @@ export const getTeamStatsAverage = async (req, res) => {
     return res.status(500).json({ message: "Failed to load team averages" });
   }
 };
-
 
